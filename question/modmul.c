@@ -15,6 +15,17 @@
  * - write the ciphertext c to stdout.
  */
 
+void montRed(mpz_t r, mpz_t t, mpz_t w, mpz_t p, mpz_t n, int k) {
+  mpz_set(r,t);
+  int b = 1 << k;
+  int j = (strlen(mpz_get_str(NULL,b,n)));
+  mpz_t u;
+  mpz_init(u);
+  for (int i = 0; i < j; i++) {
+    
+  }
+}
+
 void windExp(mpz_t t, mpz_t x, mpz_t y2, mpz_t n, int k) {
   mpz_t y,temp;
   mpz_set_ui(t,1);
@@ -65,7 +76,7 @@ void windExp(mpz_t t, mpz_t x, mpz_t y2, mpz_t n, int k) {
 
     for (int j = i - l + 1; j > 0; j --) {mpz_mul(t,t,t);}
 
-    if (u != 0) {mpz_add(t,t,T[(int)((u - 1)/2)]);}
+    if (u != 0) {mpz_mul(t,t,T[(int)(u)]);}
     i = l - 1;
   }
   mpz_clear(y);
