@@ -29,15 +29,83 @@ void montRed(mpz_t r, mpz_t t, mpz_t w, mpz_t p, mpz_t n, int k) {
   }
 }
 
-void montMul(mpz_t r, mpz_t x, mpz_t y, mpz_t w, mpz_t p, mpz_t n, int k) {
+void grabBits(mpz_t r_i, mpz_t r, int k, int i) {
+  int r_j = 0;
+  int l = i*k;
+  for (int j = 0; j < k; j ++) {
+    r_j = r_j << 1;
+    r_j = r_j + mpz_tstbit(r,(j+l));
+  }
+  mpz_set_ui(r_i,r_j);
+}
+
+void montRho(mpz_t p, mpz_t n, int k) {
+
+  mpz_t b,two,kz;
+  mpz_init(b);
+  mpz_init_set_ui(two,2);
+  mpz_init_set_ui(kz,k);
+  windExp(b,two,kz,n,windExpK);
+  mpz_set(p,b);
+  while (mpz_cmp(p,n) < 0) {
+    mpz_mul(p,p,b);
+  }
+}
+
+void montOmega(mpz_t w, mpz_t n, mpz_t p) {
+  mpz_sub(w,n,p);
+  mpz_invert(w,w,p);
+}
+
+void montHat(mpz_t xHat, mpz_t p, mpz_t w, mpz_t x, mpz_t n, int k) {
+  mpz_t p2;
+  mpz_init(p2);
+  mpz_mul(p2,p,p);
+  mpz_mod(p2,p2,n);
+  montMul(xHat,x,p2,p,w,n,k);
+}
+
+void montSetup(mpz_t xHat, mpz_t p, mpz_t w, mpz_t x, mpz_t n, int k) {
+  montRho(p,n,k);
+  montOmega(w,n,p);
+  montHat(xHat,p,w,x,n,k);
+}
+
+void deMont(mpz_t x, mpz_t xHat, mpz_t p, mpz_t w, mpz_t n, int k) {
+  mpz_t one;
+  mpz_init_set_ui(one,1);
+  montMul(x,xHat,one,p,w,n,k);
+}
+
+void montMul(mpz_t r, mpz_t x, mpz_t y, mpz_t p, mpz_t w, mpz_t n, int k) {
   mpz_set(r,0);
   int b = 1 << k;
   int j = (strlen(mpz_get_str(NULL,b,n)));
 
-  mpz_t u;
-  mpz_init(u);
+  mpz_t u, r_0, y_i, x_0, t1, t2, bZ;
+  mpz_init_set_ui(u,0);
+  mpz_init_set_ui(r_0,0);
+  mpz_init_set_ui(y_i,0);
+  mpz_init_set_ui(x_0,0);
+  mpz_init_set_ui(t1,0);
+  mpz_init_set_ui(t2,0);
+  mpz_init_set_ui(bZ,b);
+  grabBits(x_0,x,k,0);
+
+  mpz_set(r_0,r);
+
   for (int i = 0; i < j; i++) {
-    mpz_mul(u,)
+    grabBits(y_i,y,k,i);
+    mpz_mul(u,y_i,x_0);
+    mpz_add(u,r_0,u);
+    mpz_mul(u,u,w);
+    mpz_mod(u,u,bZ);
+
+    mpz_mul(t1,u,n);
+    mpz_mul(t2,y_i,x);
+    mpz_add(r,r,t1);
+    mpz_add(r,r,t2);
+    mpz_fdiv_q_2exp(r,r,k);
   }
 
   if (mpz_cmp(r,n) >= 0) {
@@ -412,6 +480,28 @@ int main( int argc, char* argv[] ) {
     mpz_clear(x);
     mpz_clear(y);
     mpz_clear(n);
+
+    mpz_t w,p,xH,yH,zH,z;
+    mpz_init_set_ui(p,1);
+    mpz_init_set_ui(w,1);
+    mpz_init_set_ui(xH,1);
+    mpz_init_set_ui(yH,1);
+    mpz_init_set_ui(zH,1);
+    mpz_init_set_ui(z,1);
+    k = 4;
+
+    montSetup(xH,p,w,x,n,k);
+    /*montHat(yH,p,w,y,n,k);
+    /*montMul(zH,xH,yH,p,w,n,k);
+    /*deMont(z,zH,p,w,n,k);
+    gmp_printf("Mont gives: %Zd\n", z);
+
+    mpz_mul(z,x,y);
+    mpz_mod(z,z,n);
+    gmp_printf("Result should be: %Zd\n", z);
+
+    */
+
   }
   else {
     abort();
