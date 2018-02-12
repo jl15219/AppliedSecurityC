@@ -18,8 +18,34 @@ const int windExpK = 8;
  * - write the ciphertext c to stdout.
  */
 
+void montRed(mpz_t r, mpz_t t, mpz_t w, mpz_t p, mpz_t n, int k) {
+  mpz_set(r,t);
+  int b = 1 << k;
+  int j = (strlen(mpz_get_str(NULL,b,n)));
+  mpz_t u;
+  mpz_init(u);
+  for (int i = 0; i < j; i++) {
+
+  }
+}
+
+void montMul(mpz_t r, mpz_t x, mpz_t y, mpz_t w, mpz_t p, mpz_t n, int k) {
+  mpz_set(r,0);
+  int b = 1 << k;
+  int j = (strlen(mpz_get_str(NULL,b,n)));
+
+  mpz_t u;
+  mpz_init(u);
+  for (int i = 0; i < j; i++) {
+    mpz_mul(u,)
+  }
+
+  if (mpz_cmp(r,n) >= 0) {
+    mpz_sub(r,r,n);
+  }
+}
+
 void windExp(mpz_t t, mpz_t x, mpz_t y, mpz_t n, int k) {
-  //mpz_t y;
   mpz_set_ui(t,1);
   //mpz_init(y);
   //mpz_mul(y,y2,t);
