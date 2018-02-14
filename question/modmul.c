@@ -18,6 +18,14 @@ const int windExpK = 8;
  * - write the ciphertext c to stdout.
  */
 
+int rdrand64( int* r ) {
+ int success;
+ asm( "rdrand %0 ; setc %1"
+      : "=r" (*r), "=qm" (success) );
+ return success;
+}
+
+
 void montRed(mpz_t r, mpz_t t, mpz_t w, mpz_t p, mpz_t n, int k) {
   mpz_set(r,t);
   int b = 1 << k;
@@ -32,28 +40,67 @@ void montRed(mpz_t r, mpz_t t, mpz_t w, mpz_t p, mpz_t n, int k) {
 void grabBits(mpz_t r_i, mpz_t r, int k, int i) {
   int r_j = 0;
   int l = i*k;
-  for (int j = 0; j < k; j ++) {
+  for (int j = (k - 1); j >= 0; j --) {
     r_j = r_j << 1;
     r_j = r_j + mpz_tstbit(r,(j+l));
   }
   mpz_set_ui(r_i,r_j);
 }
 
-void montRho(mpz_t p, mpz_t n, int k) {
 
-  mpz_t b,two,kz;
-  mpz_init(b);
-  mpz_init_set_ui(two,2);
-  mpz_init_set_ui(kz,k);
-  windExp(b,two,kz,n,windExpK);
-  mpz_set(p,b);
-  while (mpz_cmp(p,n) < 0) {
-    mpz_mul(p,p,b);
+void montMul(mpz_t r, mpz_t x, mpz_t y, mpz_t p, mpz_t w, mpz_t n, int k) {
+  mpz_set_ui(r,0);
+  int b = 1 << k;
+  int j = (strlen(mpz_get_str(NULL,b,n)));
+  //gmp_printf("j = %d\n",j);
+
+  mpz_t u, r_0, y_i, x_0, t0, t1, bZ;
+  mpz_init_set_ui(u,0);
+  mpz_init_set_ui(r_0,0);
+  mpz_init_set_ui(y_i,0);
+  mpz_init_set_ui(x_0,0);
+  mpz_init_set_ui(t1,0);
+  mpz_init_set_ui(t0,0);
+  mpz_init_set_ui(bZ,b);
+  grabBits(x_0,x,k,0);
+
+  for (int i = 0; i < j; i++) {
+    grabBits(r_0,r,k,0);
+    grabBits(x_0,x,k,0);
+    grabBits(y_i,y,k,i);
+
+    mpz_mul(u,y_i,x_0);
+    //gmp_printf("%d)a)t1 = %Zd <- (u = %Zd)*(n = %Zd)\n",i,t1, u,n);
+    mpz_add(u,r_0,u);
+    mpz_mul(u,u,w);
+    mpz_mod(u,u,bZ);
+
+    mpz_mul(t0,y_i,x);
+    mpz_mul(t1,u,n);
+    //gmp_printf("%d)a)t1 = %Zd <- (u = %Zd)*(n = %Zd)\n",i,t1, u,n);
+    mpz_add(t1,t0,t1);
+    //gmp_printf("%d)a)t1 = %Zd <- (t0 = %Zd)+t1\n",i,t1, t0);
+    mpz_add(t1,r,t1);
+    //gmp_printf("%d)a)t1 = %Zd <- (r = %Zd)*(t1)\n",i,t1, r);
+    mpz_fdiv_q_2exp(r,t1,k);
+    //gmp_printf("r = %Zd <- (t1 = %Zd)/(2^%d)", r ,t1, k);
+    //gmp_printf("%d) r = %Zd, r_0 = %Zd, u = %Zd, x_0 = %Zd, y_i = %Zd, x = %Zo, y = %Zo, t0 = %Zd, t1 = %Zd, n = %Zd\n", i, r, r_0, u, x_0, y_i, x, y, t0, t1,n);
   }
+  //gmp_printf("\n");
+  if (mpz_cmp(r,n) >= 0) {
+    mpz_sub(r,r,n);
+  }
+  mpz_clear(u);
+  mpz_clear(r_0);
+  mpz_clear(y_i);
+  mpz_clear(x_0);
+  mpz_clear(t0);
+  mpz_clear(t1);
+  mpz_clear(bZ);
 }
 
 void montOmega(mpz_t w, mpz_t n, mpz_t p) {
-  mpz_sub(w,n,p);
+  mpz_sub(w,p,n);
   mpz_invert(w,w,p);
 }
 
@@ -63,57 +110,17 @@ void montHat(mpz_t xHat, mpz_t p, mpz_t w, mpz_t x, mpz_t n, int k) {
   mpz_mul(p2,p,p);
   mpz_mod(p2,p2,n);
   montMul(xHat,x,p2,p,w,n,k);
-}
-
-void montSetup(mpz_t xHat, mpz_t p, mpz_t w, mpz_t x, mpz_t n, int k) {
-  montRho(p,n,k);
-  montOmega(w,n,p);
-  montHat(xHat,p,w,x,n,k);
+  mpz_clear(p2);
 }
 
 void deMont(mpz_t x, mpz_t xHat, mpz_t p, mpz_t w, mpz_t n, int k) {
   mpz_t one;
   mpz_init_set_ui(one,1);
   montMul(x,xHat,one,p,w,n,k);
+  mpz_clear(one);
 }
 
-void montMul(mpz_t r, mpz_t x, mpz_t y, mpz_t p, mpz_t w, mpz_t n, int k) {
-  mpz_set(r,0);
-  int b = 1 << k;
-  int j = (strlen(mpz_get_str(NULL,b,n)));
-
-  mpz_t u, r_0, y_i, x_0, t1, t2, bZ;
-  mpz_init_set_ui(u,0);
-  mpz_init_set_ui(r_0,0);
-  mpz_init_set_ui(y_i,0);
-  mpz_init_set_ui(x_0,0);
-  mpz_init_set_ui(t1,0);
-  mpz_init_set_ui(t2,0);
-  mpz_init_set_ui(bZ,b);
-  grabBits(x_0,x,k,0);
-
-  mpz_set(r_0,r);
-
-  for (int i = 0; i < j; i++) {
-    grabBits(y_i,y,k,i);
-    mpz_mul(u,y_i,x_0);
-    mpz_add(u,r_0,u);
-    mpz_mul(u,u,w);
-    mpz_mod(u,u,bZ);
-
-    mpz_mul(t1,u,n);
-    mpz_mul(t2,y_i,x);
-    mpz_add(r,r,t1);
-    mpz_add(r,r,t2);
-    mpz_fdiv_q_2exp(r,r,k);
-  }
-
-  if (mpz_cmp(r,n) >= 0) {
-    mpz_sub(r,r,n);
-  }
-}
-
-void windExp(mpz_t t, mpz_t x, mpz_t y, mpz_t n, int k) {
+void windExpTest(mpz_t t, mpz_t x, mpz_t y, mpz_t n, int k) {
   mpz_set_ui(t,1);
   //mpz_init(y);
   //mpz_mul(y,y2,t);
@@ -174,6 +181,107 @@ void windExp(mpz_t t, mpz_t x, mpz_t y, mpz_t n, int k) {
   for (mp_bitcnt_t i = 0; i < (j + 3); i ++) {
     mpz_clear(T[i]);
   }
+}
+
+void montRho(mpz_t p, mpz_t n, int k) {
+
+  mpz_t b,two,kz;
+  mpz_init(b);
+  mpz_init_set_ui(two,2);
+  mpz_init_set_ui(kz,k);
+  windExpTest(b,two,kz,n,windExpK);
+  mpz_set(p,b);
+  while (mpz_cmp(p,n) < 0) {
+    mpz_mul(p,p,b);
+  }
+}
+
+void montSetup(mpz_t xHat, mpz_t p, mpz_t w, mpz_t x, mpz_t n, int k) {
+  //gmp_printf("Creating Rho\n");
+  montRho(p,n,k);
+  //gmp_printf("Rho made\nCreating Omega\n");
+  montOmega(w,n,p);
+  //gmp_printf("Omega made\nCreating xHat\n");
+  montHat(xHat,p,w,x,n,k);
+  //gmp_printf("xHat made\n");
+}
+
+void windExp(mpz_t t, mpz_t x, mpz_t y, mpz_t n, int k) {
+  mpz_set_ui(t,1);
+  //mpz_init(y);
+  //mpz_mul(y,y2,t);
+  //gmp_printf("23: %Zd\n",y);
+  mpz_t w, p, xH, tH, zH;
+  mpz_init(w);
+  mpz_init(p);
+  mpz_init(xH);
+  mpz_init(tH);
+  mpz_init(zH);
+  int montK = 2;
+
+  montSetup(xH,p,w,x,n,montK);
+  montHat(tH,p,w,t,n,montK);
+
+  int j = 2;
+  j = j << (k-2);
+
+  mpz_t T [j + 2];
+  mpz_init_set(T[0],xH);
+  for (mp_bitcnt_t i = 0; i < (j + 2); i ++) {
+    mpz_init(T[i+1]);
+    montMul(T[i+1],T[i],xH,p,w,n,montK);
+    montMul(zH,T[i+1],xH,p,w,n,montK);
+    mpz_set(T[i+1],zH);
+  }
+  mp_bitcnt_t i = (mpz_sizeinbase(y,2));
+
+  mp_bitcnt_t l;
+  mp_bitcnt_t u;
+
+  while ((i + 1) > 0)  {
+    //gmp_printf("%Zd\n", t);
+    if (mpz_tstbit(y,i) == 0) {
+      l = i;
+      u = 0;
+    }
+    else {
+      j = i-k+1;
+      if (j > 0) {l = i - k + 1;}
+      else {l = 0;}
+      //gmp_printf("%d",l);
+      u = 0;
+      while (mpz_tstbit(y,l) == 0) {
+        l = l + 1;
+        //gmp_printf(", %d", l);
+      }
+      //mpz_mul(temp,y,1);
+      //for (int a = 0, a < l, a) {mpz};
+      for (j = i; (j + 1) > l; j --) {
+        u = u << 1 ;
+        u = u + mpz_tstbit(y,j);
+      }
+    }
+
+    for (int j = i - l + 1; j > 0; j --) {
+      montMul(zH,tH,tH,p,w,n,montK);
+      mpz_set(tH,zH);
+    }
+
+    if (u != 0) {
+      montMul(zH,tH,T[(int)((u - 1)/2)],p,w,n,montK);
+      mpz_set(tH,zH);
+    }
+    i = l - 1;
+  }
+  for (mp_bitcnt_t i = 0; i < (j + 3); i ++) {
+    mpz_clear(T[i]);
+  }
+  deMont(t,tH,p,w,n,montK);
+  mpz_clear(w);
+  mpz_clear(p);
+  mpz_clear(tH);
+  mpz_clear(xH);
+  mpz_clear(zH);
 }
 
 //////////////////////////////////////
@@ -246,8 +354,26 @@ void stage3(mpz_t c1, mpz_t c2, mpz_t p, mpz_t q, mpz_t g, mpz_t h, mpz_t m) {
   printf("%d\n",end);
   // MUST CHANGE TO RANDOMIZER
   gmp_randinit_default(rState);
-  mytime = time(NULL);
-  gmp_randseed_ui(rState,mytime);
+
+  int randomData;
+  int * randomPointer;
+  randomPointer = &randomData;
+  rdrand64(randomPointer);
+
+  //int randomData = open("/dev/urandom", O_RDONLY);
+  //if (randomData < 0) {
+  //  myclock = time(NULL);
+  //}
+  //else
+  //{
+  //  char myRandomData[50];
+  //  ssize_t result = read(randomData, myRandomData, sizeof myRandomData);
+  //  if (result < 0)
+  //  {
+  //      // something went wrong
+  //  }
+  //}
+  gmp_randseed_ui(rState,4);
   mpz_urandomm(r,rState,q);
   gmp_printf("%ZX from %ZX\n",r,q);
 
@@ -454,32 +580,30 @@ int main( int argc, char* argv[] ) {
     mpz_init(x);
     mpz_init(y);
     mpz_init(n);
-    //mpz_set_ui(t,1);
-    //mpz_set_ui(x,1691348502958209058);
-    //mpz_set_ui(y,1134582093582034421);
-    //mpz_set_ui(n,9252522347);
+    mpz_set_ui(t,1);
+    mpz_set_ui(x,16224);
+    mpz_set_ui(y,1124);
+    int intN = 21903;
+    mpz_set_ui(n,intN);
 
-    if (1 != gmp_scanf("%ZX\n",x)) {
-      abort();
-    }
-    if (1 != gmp_scanf("%ZX\n",y)) {
-      abort();
-    }
-    if (1 != gmp_scanf("%ZX\n",n)) {
-      abort();
-    }
+    //if (1 != gmp_scanf("%ZX\n",x)) {
+    //  abort();
+    //}
+    //if (1 != gmp_scanf("%ZX\n",y)) {
+    //  abort();
+    //}
+    //if (1 != gmp_scanf("%ZX\n",n)) {
+    //  abort();
+    //}
 
     gmp_printf("Finished Reading in\n");
 
     int k = 8;
     windExp(t,x,y,n,k);
-    gmp_printf("Wind Exp gives: %Zd\n", t);
-    mpz_powm_sec(t,x,y,n);
+    gmp_printf("Mont Wind Exp gives: %Zd\n", t);
+    windExpTest(t,x,y,n,k);
     gmp_printf("Result should be: %Zd\n", t);
     mpz_clear(t);
-    mpz_clear(x);
-    mpz_clear(y);
-    mpz_clear(n);
 
     mpz_t w,p,xH,yH,zH,z;
     mpz_init_set_ui(p,1);
@@ -488,20 +612,33 @@ int main( int argc, char* argv[] ) {
     mpz_init_set_ui(yH,1);
     mpz_init_set_ui(zH,1);
     mpz_init_set_ui(z,1);
-    k = 4;
+    k = 3;
 
     montSetup(xH,p,w,x,n,k);
-    /*montHat(yH,p,w,y,n,k);
-    /*montMul(zH,xH,yH,p,w,n,k);
-    /*deMont(z,zH,p,w,n,k);
+    montHat(yH,p,w,y,n,k);
+    //gmp_printf("\nN = %Zd, b = %d, Rho = %Zd, Omega = %Zd, xHat = %Zd, yHat = %Zd\n",n,1 << k,p,w,xH,yH);
+
+
+    montMul(zH,xH,yH,p,w,n,k);
+    deMont(z,zH,p,w,n,k);
     gmp_printf("Mont gives: %Zd\n", z);
 
     mpz_mul(z,x,y);
     mpz_mod(z,z,n);
     gmp_printf("Result should be: %Zd\n", z);
 
-    */
+    for (int ij = 0; ij < intN; ij++) {
+      montHat(xH,p,w,x,n,k);
+      deMont(y,xH,p,w,n,k);
+      if (mpz_cmp(x,y) != 0) {
+        gmp_printf("NOOOO\n");
+      }
+    }
 
+
+    mpz_clear(x);
+    mpz_clear(y);
+    mpz_clear(n);
   }
   else {
     abort();
